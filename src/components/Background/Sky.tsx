@@ -22,7 +22,6 @@ const Sky = ({ seed }: { seed: number }) => {
 
   // Example usage:
   const timeCheck = isNight();
-  const skyRef = useRef<THREE.Mesh>(null);
   const cloudConfigs = useMemo(() => createCloudConfigs(seed), [seed]);
 
   useEffect(() => {
@@ -44,7 +43,6 @@ const Sky = ({ seed }: { seed: number }) => {
         />
       )}
       <SkyImpl
-        ref={skyRef}
         distance={420069}
         sunPosition={[sunPosition.x, sunPosition.y, sunPosition.z]}
         inclination={0}
