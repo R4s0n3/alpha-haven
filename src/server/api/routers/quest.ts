@@ -9,6 +9,7 @@ import { UserTradeKind, UserTradeStatus } from "@/server/dbEnums";
 import { AUTO_ROUTE_UNLOCK_LEVEL } from "@/server/gameBalance";
 import { syncPlayerGameState } from "@/server/gameEngine";
 import {
+  MAX_ROCKET_CARGO_CAPACITY,
   MAX_ROCKET_FUEL_CAPACITY,
   ensurePlayerState,
 } from "@/server/gameContent";
@@ -35,6 +36,7 @@ const SPECIAL_EVENT_DURATION_SECONDS = [10 * 60, 15 * 60, 20 * 60] as const;
 const LANDING_SECONDS = 5;
 const SELL_REWARD_MULTIPLIER = 1.16;
 const SPECIAL_REWARD_MULTIPLIER = 2.35;
+const MIN_ROCKET_FUEL_REQUIRED = 500;
 const MAX_SHIPMENT_AMOUNT = 1000;
 const REWARD_MATERIAL_NAMES = ["Bloons", "Zaza", "Rhoons"] as const;
 const FILLED_TRADE_STATUSES = [
@@ -274,10 +276,15 @@ function getFuelRequired(
   requestedMaterial: Material,
 ) {
   const cargoWeight = Math.max(1, requestedMaterial.weight);
+  const distanceFuel = routeDistance * 4;
+  const cargoFuel = Math.cbrt(requestedAmount * cargoWeight) * 11;
 
   return Math.max(
-    1,
-    Math.ceil(routeDistance * 9 + requestedAmount * cargoWeight * 0.8),
+    MIN_ROCKET_FUEL_REQUIRED,
+    Math.min(
+      MAX_ROCKET_FUEL_CAPACITY,
+      Math.ceil(distanceFuel + cargoFuel),
+    ),
   );
 }
 
@@ -286,14 +293,25 @@ function getMaxShipmentByFuelCapacity(
   requestedMaterial: Material,
   fuelCapacity: number,
 ) {
-  const cargoWeight = Math.max(1, requestedMaterial.weight);
-  const availableFuel = fuelCapacity - routeDistance * 9;
-
-  if (availableFuel <= 0) {
+  if (fuelCapacity < MIN_ROCKET_FUEL_REQUIRED) {
     return 0;
   }
 
-  return Math.max(0, Math.floor(availableFuel / (cargoWeight * 0.8)));
+  let low = 0;
+  let high = MAX_SHIPMENT_AMOUNT;
+
+  while (low < high) {
+    const mid = Math.ceil((low + high + 1) / 2);
+    const midFuel = getFuelRequired(routeDistance, mid, requestedMaterial);
+
+    if (midFuel <= fuelCapacity) {
+      low = mid;
+    } else {
+      high = mid - 1;
+    }
+  }
+
+  return low;
 }
 
 function getLoadSeconds(requestedAmount: number, fuelRequired: number) {
@@ -427,6 +445,7 @@ function buildOffers(
       : baseDemand;
     const requestedAmount = Math.min(
       MAX_SHIPMENT_AMOUNT,
+      MAX_ROCKET_CARGO_CAPACITY,
       totalRequestedAmount,
       getMaxShipmentByFuelCapacity(
         routeDistance,
@@ -448,6 +467,10 @@ function buildOffers(
       rewardName,
       seed,
       rewardMultiplier,
+    );
+    const cappedRewardAmount = Math.max(
+      1,
+      Math.min(rewardAmount, MAX_ROCKET_CARGO_CAPACITY),
     );
     const fuelRequired = getFuelRequired(
       routeDistance,
@@ -475,7 +498,7 @@ function buildOffers(
         requestedName,
         requestedAmount,
         rewardName,
-        rewardAmount,
+        cappedRewardAmount,
         fuelRequired,
         seed,
         totalRequestedAmount,
@@ -485,7 +508,7 @@ function buildOffers(
       totalRequestedAmount,
       remainingAmount: totalRequestedAmount,
       rewardMaterial,
-      rewardAmount,
+      rewardAmount: cappedRewardAmount,
       fuelMaterial,
       fuelRequired,
       durationSeconds,
@@ -760,15 +783,29 @@ function getMinimumShipment(remainingAmount: number) {
 }
 
 function getMaxShipmentByFuel(offer: GeneratedOffer, fuelCapacity: number) {
-  const cargoWeight = Math.max(1, offer.requestedMaterial.weight);
-  const baseFuel = offer.routeDistance * 9;
-  const availableFuel = fuelCapacity - baseFuel;
-
-  if (availableFuel <= 0) {
+  if (fuelCapacity < MIN_ROCKET_FUEL_REQUIRED) {
     return 0;
   }
 
-  return Math.max(0, Math.floor(availableFuel / (cargoWeight * 0.8)));
+  let low = 0;
+  let high = Math.min(MAX_SHIPMENT_AMOUNT, offer.totalRequestedAmount);
+
+  while (low < high) {
+    const mid = Math.ceil((low + high + 1) / 2);
+    const midFuel = getFuelRequired(
+      offer.routeDistance,
+      mid,
+      offer.requestedMaterial,
+    );
+
+    if (midFuel <= fuelCapacity) {
+      low = mid;
+    } else {
+      high = mid - 1;
+    }
+  }
+
+  return low;
 }
 
 function getShipmentForRocket(
@@ -837,16 +874,24 @@ function getShipmentForRocket(
     return null;
   }
 
+  const rewardAmount = Math.max(
+    1,
+    Math.min(
+      getExchangeAmount(
+        offer.requestedMaterial.name as TradeMaterialName,
+        shipmentAmount,
+        offer.rewardMaterial.name as TradeMaterialName,
+        hashString(offer.id),
+        offer.rewardMultiplier,
+      ),
+      rocket.cargoCapacity,
+    ),
+  );
+
   return {
     shipmentAmount,
     fuelRequired,
-    rewardAmount: getExchangeAmount(
-      offer.requestedMaterial.name as TradeMaterialName,
-      shipmentAmount,
-      offer.rewardMaterial.name as TradeMaterialName,
-      hashString(offer.id),
-      offer.rewardMultiplier,
-    ),
+    rewardAmount,
     loadSeconds: getLoadSeconds(shipmentAmount, fuelRequired),
   };
 }

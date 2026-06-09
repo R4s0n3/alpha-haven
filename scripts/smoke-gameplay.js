@@ -9,6 +9,7 @@ loadEnvConfig(process.cwd());
 const { appRouter } = require("../src/server/api/root");
 const { db } = require("../src/server/db");
 const {
+  MAX_ROCKET_CARGO_CAPACITY,
   MAX_ROCKET_FUEL_CAPACITY,
 } = require("../src/server/gameContent");
 const {
@@ -140,6 +141,14 @@ async function main() {
     assert.ok(
       offers.every((offer) => offer.fuelRequired <= MAX_ROCKET_FUEL_CAPACITY),
       "Quest fuel demands should stay within the best rocket's max fuel capacity.",
+    );
+    assert.ok(
+      offers.every((offer) => offer.requestedAmount <= MAX_ROCKET_CARGO_CAPACITY),
+      "Quest cargo demands should stay within the best rocket's max cargo capacity.",
+    );
+    assert.ok(
+      offers.every((offer) => offer.rewardAmount <= MAX_ROCKET_CARGO_CAPACITY),
+      "Quest awards should stay within the best rocket's max cargo capacity.",
     );
     const offer = offers.find((candidate) => candidate.eligibleRockets.length);
     assert.ok(offer, "A funded player with an idle rocket should see offers.");

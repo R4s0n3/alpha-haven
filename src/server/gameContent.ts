@@ -564,6 +564,12 @@ export const MAX_ROCKET_FUEL_CAPACITY = Math.max(
   ),
 );
 
+export const MAX_ROCKET_CARGO_CAPACITY = Math.max(
+  ...rocketBlueprints.map((rocket) =>
+    Math.floor(rocket.cargoCapacity * (1 + (MAX_ROCKET_UPGRADE - 1) * 0.09)),
+  ),
+);
+
 let gameContentPromise: Promise<void> | null = null;
 const playerStatePromises = new Map<string, Promise<void>>();
 
