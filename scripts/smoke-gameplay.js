@@ -9,6 +9,9 @@ loadEnvConfig(process.cwd());
 const { appRouter } = require("../src/server/api/root");
 const { db } = require("../src/server/db");
 const {
+  MAX_ROCKET_FUEL_CAPACITY,
+} = require("../src/server/gameContent");
+const {
   addInventoryAmount,
 } = require("../src/server/repositories/inventoryRepository");
 
@@ -134,6 +137,10 @@ async function main() {
     const offers = await caller.quest.getOffers({
       includeAllForeignPlanets: true,
     });
+    assert.ok(
+      offers.every((offer) => offer.fuelRequired <= MAX_ROCKET_FUEL_CAPACITY),
+      "Quest fuel demands should stay within the best rocket's max fuel capacity.",
+    );
     const offer = offers.find((candidate) => candidate.eligibleRockets.length);
     assert.ok(offer, "A funded player with an idle rocket should see offers.");
 

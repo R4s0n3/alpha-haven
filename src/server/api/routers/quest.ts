@@ -8,7 +8,10 @@ import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 import { UserTradeKind, UserTradeStatus } from "@/server/dbEnums";
 import { AUTO_ROUTE_UNLOCK_LEVEL } from "@/server/gameBalance";
 import { syncPlayerGameState } from "@/server/gameEngine";
-import { ensurePlayerState } from "@/server/gameContent";
+import {
+  MAX_ROCKET_FUEL_CAPACITY,
+  ensurePlayerState,
+} from "@/server/gameContent";
 import {
   addInventoryAmount,
   reserveInventoryAmount,
@@ -278,6 +281,21 @@ function getFuelRequired(
   );
 }
 
+function getMaxShipmentByFuelCapacity(
+  routeDistance: number,
+  requestedMaterial: Material,
+  fuelCapacity: number,
+) {
+  const cargoWeight = Math.max(1, requestedMaterial.weight);
+  const availableFuel = fuelCapacity - routeDistance * 9;
+
+  if (availableFuel <= 0) {
+    return 0;
+  }
+
+  return Math.max(0, Math.floor(availableFuel / (cargoWeight * 0.8)));
+}
+
 function getLoadSeconds(requestedAmount: number, fuelRequired: number) {
   return Math.min(
     240,
@@ -348,6 +366,7 @@ function pickVisibleOffers<
 
 function buildOffers(
   materials: Material[],
+  maxRocketFuelCapacity: number,
   planetId?: string,
   includeAllForeignPlanets = false,
 ): GeneratedOffer[] {
@@ -406,7 +425,20 @@ function buildOffers(
     const totalRequestedAmount = isSpecialOffer
       ? Math.max(100_000, Math.ceil(baseDemand * 0.35))
       : baseDemand;
-    const requestedAmount = Math.min(MAX_SHIPMENT_AMOUNT, totalRequestedAmount);
+    const requestedAmount = Math.min(
+      MAX_SHIPMENT_AMOUNT,
+      totalRequestedAmount,
+      getMaxShipmentByFuelCapacity(
+        routeDistance,
+        requestedMaterial,
+        maxRocketFuelCapacity,
+      ),
+    );
+
+    if (requestedAmount <= 0) {
+      return null;
+    }
+
     const rewardMultiplier = isSpecialOffer
       ? SPECIAL_REWARD_MULTIPLIER
       : SELL_REWARD_MULTIPLIER;
@@ -1071,7 +1103,12 @@ async function repeatTradeIfPossible(
   }
 
   const materials = await tx.material.findMany();
-  const currentOffer = buildOffers(materials, undefined, true).find(
+  const currentOffer = buildOffers(
+    materials,
+    MAX_ROCKET_FUEL_CAPACITY,
+    undefined,
+    true,
+  ).find(
     (offer) => offer.id === trade.offerId,
   );
 
@@ -1810,6 +1847,7 @@ export const questRouter = createTRPCRouter({
       ).length;
       const generatedOffers = buildOffers(
         materials,
+        MAX_ROCKET_FUEL_CAPACITY,
         input?.planetId,
         input?.includeAllForeignPlanets ?? false,
       );
@@ -2089,7 +2127,12 @@ export const questRouter = createTRPCRouter({
         });
       }
 
-      const offer = buildOffers(materials, undefined, true).find(
+      const offer = buildOffers(
+        materials,
+        MAX_ROCKET_FUEL_CAPACITY,
+        undefined,
+        true,
+      ).find(
         (generatedOffer) => generatedOffer.id === input.offerId,
       );
 

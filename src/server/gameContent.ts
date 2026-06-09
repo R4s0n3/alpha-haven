@@ -1,5 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 
+import { MAX_ROCKET_UPGRADE } from "@/server/gameBalance";
+
 type GameDb = Pick<
   PrismaClient,
   | "building"
@@ -555,6 +557,12 @@ const rocketBlueprints: RocketBlueprint[] = [
     cargoCapacity: 500,
   },
 ];
+
+export const MAX_ROCKET_FUEL_CAPACITY = Math.max(
+  ...rocketBlueprints.map((rocket) =>
+    Math.floor(rocket.fuelCapacity * (1 + (MAX_ROCKET_UPGRADE - 1) * 0.08)),
+  ),
+);
 
 let gameContentPromise: Promise<void> | null = null;
 const playerStatePromises = new Map<string, Promise<void>>();
