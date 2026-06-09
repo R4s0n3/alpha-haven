@@ -1,0 +1,325 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserTradeKind {
+  BUY
+  SELL
+}
+
+enum UserTradeStatus {
+  LOADING
+  READY_TO_LAUNCH
+  IN_ROUTE
+  LANDING
+  READY
+  READY_TO_CLAIM
+  STOPPED
+  COMPLETED
+  EXPIRED
+  ACCEPTED
+  IN_FLIGHT
+}
+
+enum StripePurchaseStatus {
+  OPEN
+  COMPLETED
+}
+
+model Rocket {
+  id            String       @id @default(cuid())
+  name          String
+  rocketId      String
+  speed         Int
+  health        Int
+  status        String
+  image         String?
+  price         Int
+  rarityId      String
+  rarity        Rarity       @relation(fields: [rarityId], references: [id])
+  type          RocketType   @relation(fields: [rocketId], references: [id])
+  fuelCapacity  Int
+  cargoCapacity Int
+  cargo         Cargo[]
+  ownedBy       UserRocket[]
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@index([name])
+}
+
+model Cargo {
+  id                 String         @id @default(cuid())
+  rocketId           String?
+  rocket             Rocket?        @relation(fields: [rocketId], references: [id], onDelete: Cascade)
+  materialId         String
+  material           Material       @relation(fields: [materialId], references: [id])
+  amount             Int
+  userId             String?
+  user               User?          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cargoId            String?
+  cargoType          CargoType?     @relation(fields: [cargoId], references: [id])
+  questId            String?
+  quest              Quest?         @relation(fields: [questId], references: [id])
+  buildingInput      Building[]     @relation("BuildingInput")
+  buildingOutput     Building[]     @relation("BuildingOutput")
+  userBuildingInput  UserBuilding[] @relation("UserBuildingInput")
+  userBuildingOutput UserBuilding[] @relation("UserBuildingOutput")
+}
+
+model Material {
+  id              String       @id @default(cuid())
+  image           String?
+  name            String
+  materialId      String
+  rarityId        String
+  weight          Int
+  rarity          Rarity       @relation(fields: [rarityId], references: [id])
+  type            MaterialType @relation(fields: [materialId], references: [id])
+  cargos          Cargo[]
+  requestedTrades UserTrade[]  @relation("TradeRequestedMaterial")
+  rewardTrades    UserTrade[]  @relation("TradeRewardMaterial")
+}
+
+model Rarity {
+  id        String     @id @default(cuid())
+  name      String
+  materials Material[]
+  rockets   Rocket[]
+}
+
+model MaterialType {
+  id        String     @id @default(cuid())
+  name      String
+  materials Material[]
+}
+
+model CargoType {
+  id     String  @id @default(cuid())
+  name   String
+  cargos Cargo[]
+}
+
+model Location {
+  id      String  @id @default(cuid())
+  userId  String
+  name    String
+  texture String?
+  xLoc    Int
+  yLoc    Int
+  zLoc    Int
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Quest {
+  id             String  @id @default(cuid())
+  title          String
+  description    String
+  duration       Int
+  cargos         Cargo[]
+  fuelMin        Int
+  activeUsers    User[]  @relation("ActiveQuests")
+  completedUsers User[]  @relation("CompletedQuests")
+}
+
+model RocketType {
+  id      String   @id @default(cuid())
+  name    String
+  rockets Rocket[]
+}
+
+// Necessary for Next auth
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? // @db.Text
+  access_token      String? // @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? // @db.Text
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id               String              @id @default(cuid())
+  name             String?
+  email            String?             @unique
+  emailVerified    DateTime?
+  image            String?
+  accounts         Account[]
+  sessions         Session[]
+  level            Int                 @default(1)
+  experiencePoints Int                 @default(0)
+  ownedBuildings   UserBuilding[]
+  ownedRockets     UserRocket[]
+  role             String?             @default("USER")
+  cargo            Cargo[]
+  locations        Location[]
+  sentRequests     Friendship[]        @relation("FriendshipRequester")
+  receivedRequests Friendship[]        @relation("FriendshipAdder")
+  activeQuests     Quest[]             @relation("ActiveQuests")
+  completedQuests  Quest[]             @relation("CompletedQuests")
+  trades           UserTrade[]
+  portAutoRoutes   UserPortAutoRoute[]
+}
+
+model Friendship {
+  id          String   @id @default(cuid())
+  requester   User     @relation("FriendshipRequester", fields: [requesterId], references: [id])
+  requesterId String
+  adder       User     @relation("FriendshipAdder", fields: [adderId], references: [id])
+  adderId     String
+  createdAt   DateTime @default(now())
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Building {
+  id                 String         @id @default(cuid())
+  name               String
+  image              String?
+  maxAmount          Int            @default(1)
+  price              Int            @default(5000)
+  productionRate     Int            @default(1)
+  productionDuration Int            @default(60)
+  reqInput           Cargo[]        @relation("BuildingInput")
+  recOutput          Cargo[]        @relation("BuildingOutput")
+  ownedBy            UserBuilding[]
+}
+
+model UserBuilding {
+  id                 String   @id @default(cuid())
+  userId             String
+  buildingId         String
+  user               User     @relation(fields: [userId], references: [id])
+  building           Building @relation(fields: [buildingId], references: [id])
+  level              Int      @default(1)
+  amount             Int      @default(0)
+  lastProductionTime DateTime @default(now())
+  lastRhoonsTime     DateTime @default(now())
+  autoRouteEnabled   Boolean  @default(false)
+  input              Cargo[]  @relation("UserBuildingInput")
+  output             Cargo[]  @relation("UserBuildingOutput")
+  purchasedAt        DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([userId, buildingId])
+  @@index([userId])
+}
+
+model UserPortAutoRoute {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  portSlot  Int
+  enabled   Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, portSlot])
+  @@index([userId])
+}
+
+model UserRocket {
+  id          String   @id @default(cuid())
+  userId      String
+  rocketId    String
+  user        User     @relation(fields: [userId], references: [id])
+  rocket      Rocket   @relation(fields: [rocketId], references: [id])
+  upgrade     Int      @default(1)
+  purchasedAt DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model UserTrade {
+  id                  String          @id @default(cuid())
+  userId              String
+  user                User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  offerId             String
+  planetId            String
+  planetName          String
+  planetTexture       String?
+  characterName       String
+  characterImage      String
+  tradeKind           UserTradeKind   @default(SELL)
+  title               String
+  description         String
+  requestedMaterialId String
+  requestedMaterial   Material        @relation("TradeRequestedMaterial", fields: [requestedMaterialId], references: [id])
+  requestedAmount     Int
+  rewardMaterialId    String
+  rewardMaterial      Material        @relation("TradeRewardMaterial", fields: [rewardMaterialId], references: [id])
+  rewardAmount        Int
+  durationSeconds     Int
+  travelSeconds       Int
+  routeDistance       Int             @default(0)
+  status              UserTradeStatus @default(LOADING)
+  portSlot            Int?
+  rocketId            String?
+  rocketName          String?
+  rocketImage         String?
+  fuelMaterialId      String?
+  fuelRequired        Int             @default(0)
+  fuelLoaded          Int             @default(0)
+  cargoLoaded         Int             @default(0)
+  loadSeconds         Int             @default(0)
+  acceptedAt          DateTime        @default(now())
+  expiresAt           DateTime
+  loadingStartedAt    DateTime?
+  loadedAt            DateTime?
+  launchedAt          DateTime?
+  arrivesAt           DateTime?
+  completedAt         DateTime?
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  @@index([userId, status])
+  @@index([userId, portSlot])
+  @@index([offerId, status])
+  @@index([rocketId])
+  @@index([planetId])
+}
+
+model StripePurchase {
+  stripeSessionId String               @id
+  userId          String
+  packageId       String
+  bloons          Int
+  priceCents      Int
+  status          StripePurchaseStatus
+  grantedAt       DateTime?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  @@index([userId])
+  @@index([status])
+}

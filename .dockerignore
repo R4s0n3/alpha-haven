@@ -1,0 +1,11 @@
+node_modules
+.next
+.git
+.env
+.env.*
+.gitignore
+README.md
+DB_ACCESS_CLEANUP.md
+brainstorm
+coverage
+.vercel
